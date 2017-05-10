@@ -72,7 +72,7 @@ instance EmbPrj HP.OtherAspect where
   icod_ HP.TypeChecks          = icode0 5
   icod_ HP.UnsolvedConstraint  = icode0 6
   icod_ HP.PositivityProblem   = icode0 7
-  icod_ HP.ReachabilityProblem = icode0 8
+  icod_ HP.DeadCodeProblem     = icode0 8
   icod_ HP.CoverageProblem     = icode0 9
 
   value = vcase valu where
@@ -84,7 +84,7 @@ instance EmbPrj HP.OtherAspect where
     valu [5] = valu0 HP.TypeChecks
     valu [6] = valu0 HP.UnsolvedConstraint
     valu [7] = valu0 HP.PositivityProblem
-    valu [8] = valu0 HP.ReachabilityProblem
+    valu [8] = valu0 HP.DeadCodeProblem
     valu [9] = valu0 HP.CoverageProblem
     valu _   = malformed
 
