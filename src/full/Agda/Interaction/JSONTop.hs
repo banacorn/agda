@@ -9,6 +9,7 @@ import Data.Aeson hiding (Result(..))
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 
+import Agda.Interaction.Encode
 import Agda.Interaction.AgdaTop
 import Agda.Interaction.Response as R
 import Agda.Interaction.EmacsCommand hiding (putResponse)
@@ -19,7 +20,7 @@ import Agda.TypeChecking.Monad
 import Agda.Utils.Pretty
 import Agda.VersionCommit
 
-----------------------------------
+--------------------------------------------------------------------------------
 
 -- | 'jsonREPL' is a interpreter like 'mimicGHCi', but outputs JSON-encoded strings.
 --
@@ -27,25 +28,62 @@ import Agda.VersionCommit
 --   interprets them, and outputs JSON-encoded strings. into stdout.
 
 jsonREPL :: TCM () -> TCM ()
-jsonREPL = repl (liftIO . BS.putStrLn <=< liftIO . jsonifyResponse) "JSON> "
+jsonREPL = repl (liftIO . BS.putStrLn <=< return . encode <=< encodeTCM) "JSON> "
 
-instance ToJSON Status where
-  toJSON status = object
-    [ "showImplicitArguments" .= sShowImplicitArguments status
-    , "checked" .= sChecked status
+--------------------------------------------------------------------------------
+
+instance EncodeTCM Response where
+  encodeTCM (Resp_HighlightingInfo info remove method modFile) =
+    liftIO (encodeHighlightingInfo info remove method modFile)
+  encodeTCM (Resp_DisplayInfo info) = return $ object
+    [ "kind" .= String "DisplayInfo"
+    , "info" .= info
     ]
+  encodeTCM (Resp_ClearHighlighting tokenBased) = return $ object
+    [ "kind"          .= String "ClearHighlighting"
+    , "tokenBased"    .= tokenBased
+    ]
+  encodeTCM Resp_DoneAborting = return $ object [ "kind" .= String "DoneAborting" ]
+  encodeTCM Resp_ClearRunningInfo = return $ object [ "kind" .= String "ClearRunningInfo" ]
+  encodeTCM (Resp_RunningInfo debugLevel msg) = return $ object
+    [ "kind"          .= String "RunningInfo"
+    , "debugLevel"    .= debugLevel
+    , "message"       .= msg
+    ]
+  encodeTCM (Resp_Status status) = return $ object
+    [ "kind"          .= String "Status"
+    , "status"        .= status
+    ]
+  encodeTCM (Resp_JumpToError filepath position) = return $ object
+    [ "kind"          .= String "JumpToError"
+    , "filepath"      .= filepath
+    , "position"      .= position
+    ]
+  encodeTCM (Resp_InteractionPoints interactionPoints) = return $ object
+    [ "kind"              .= String "InteractionPoints"
+    , "interactionPoints" .= interactionPoints
+    ]
+  encodeTCM (Resp_GiveAction i giveResult) = return $ object
+    [ "kind"              .= String "GiveAction"
+    , "interactionPoint"  .= i
+    , "giveResult"        .= giveResult
+    ]
+  encodeTCM (Resp_MakeCase variant clauses) = return $ object
+    [ "kind"          .= String "MakeCase"
+    , "variant"       .= variant
+    , "clauses"       .= clauses
+    ]
+  encodeTCM (Resp_SolveAll solutions) = return $ object
+    [ "kind"          .= String "SolveAll"
+    , "solutions"     .= map encodeSolution solutions
+    ]
+    where
+      encodeSolution (i, expr) = object
+        [ "interactionPoint"  .= i
+        , "expression"        .= show expr
+        ]
 
-instance ToJSON InteractionId where
-  toJSON (InteractionId i) = toJSON i
-
-instance ToJSON GiveResult where
-  toJSON (Give_String s) = toJSON s
-  toJSON Give_Paren = toJSON True
-  toJSON Give_NoParen = toJSON False
-
-instance ToJSON MakeCaseVariant where
-  toJSON R.Function = String "Function"
-  toJSON R.ExtendedLambda = String "ExtendedLambda"
+--------------------------------------------------------------------------------
 
 instance ToJSON DisplayInfo where
   toJSON (Info_CompilationOk warnings errors) = object
@@ -81,54 +119,23 @@ instance ToJSON DisplayInfo where
     , "version" .= (("Agda version " ++ versionWithCommitInfo) :: String)
     ]
 
--- | Convert Response to an JSON value for interactive editor frontends.
-jsonifyResponse :: Response -> IO ByteString
-jsonifyResponse (Resp_HighlightingInfo info remove method modFile) =
-   encode <$> jsonifyHighlightingInfo info remove method modFile
-jsonifyResponse (Resp_DisplayInfo info) = return $ encode $ object
-  [ "kind" .= String "DisplayInfo"
-  , "info" .= info
-  ]
-jsonifyResponse (Resp_ClearHighlighting tokenBased) = return $ encode $ object
-  [ "kind"          .= String "ClearHighlighting"
-  , "tokenBased"    .= tokenBased
-  ]
-jsonifyResponse Resp_DoneAborting = return $ encode $ object [ "kind" .= String "DoneAborting" ]
-jsonifyResponse Resp_ClearRunningInfo = return $ encode $ object [ "kind" .= String "ClearRunningInfo" ]
-jsonifyResponse (Resp_RunningInfo debugLevel msg) = return $ encode $ object
-  [ "kind"          .= String "RunningInfo"
-  , "debugLevel"    .= debugLevel
-  , "message"       .= msg
-  ]
-jsonifyResponse (Resp_Status status) = return $ encode $ object
-  [ "kind"          .= String "Status"
-  , "status"        .= status
-  ]
-jsonifyResponse (Resp_JumpToError filepath position) = return $ encode $ object
-  [ "kind"          .= String "JumpToError"
-  , "filepath"      .= filepath
-  , "position"      .= position
-  ]
-jsonifyResponse (Resp_InteractionPoints interactionPoints) = return $ encode $ object
-  [ "kind"              .= String "InteractionPoints"
-  , "interactionPoints" .= interactionPoints
-  ]
-jsonifyResponse (Resp_GiveAction i giveResult) = return $ encode $ object
-  [ "kind"              .= String "GiveAction"
-  , "interactionPoint"  .= i
-  , "giveResult"        .= giveResult
-  ]
-jsonifyResponse (Resp_MakeCase variant clauses) = return $ encode $ object
-  [ "kind"          .= String "MakeCase"
-  , "variant"       .= variant
-  , "clauses"       .= clauses
-  ]
-jsonifyResponse (Resp_SolveAll solutions) = return $ encode $ object
-  [ "kind"          .= String "SolveAll"
-  , "solutions"     .= map encodeSolution solutions
-  ]
-  where
-    encodeSolution (i, expr) = object
-      [ "interactionPoint"  .= i
-      , "expression"        .= show expr
-      ]
+instance EncodeTCM DisplayInfo where
+  encodeTCM = return . toJSON
+
+instance ToJSON Status where
+  toJSON status = object
+    [ "showImplicitArguments" .= sShowImplicitArguments status
+    , "checked" .= sChecked status
+    ]
+
+instance ToJSON InteractionId where
+  toJSON (InteractionId i) = toJSON i
+
+instance ToJSON GiveResult where
+  toJSON (Give_String s) = toJSON s
+  toJSON Give_Paren = toJSON True
+  toJSON Give_NoParen = toJSON False
+
+instance ToJSON MakeCaseVariant where
+  toJSON R.Function = String "Function"
+  toJSON R.ExtendedLambda = String "ExtendedLambda"
