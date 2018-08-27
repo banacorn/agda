@@ -39,8 +39,7 @@ import qualified Agda.Syntax.Scope.Base as S
 import qualified Agda.Syntax.Scope.Monad as S
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Errors
-  (topLevelModuleDropper, verbalize, Indefinite(..))
-import Agda.TypeChecking.Pretty (prettyTCM, prettyA)
+import Agda.TypeChecking.Pretty (prettyTCM, prettyA, prettyPattern)
 import Agda.TypeChecking.Telescope (ifPiType)
 
 import Agda.Utils.Pretty
@@ -454,56 +453,88 @@ instance EncodeTCM TypeError where
       , "telescope"       #= prettyTCM tel
       ]
 
-    -- ShouldBeEmpty t ps -> obj
-    --   [ "kind"            @= String "ShouldBeEmpty"
-    --   , "type"          #= prettyTCM t
-    --   , "patterns" #= mapM (prettyPat 0) ps
-    --   ]
+    ShouldBeEmpty t ps -> obj
+      [ "kind"            @= String "ShouldBeEmpty"
+      , "type"            #= prettyTCM t
+      , "patterns"        #= mapM (prettyPattern 0) ps
+      ]
 
-    -- ShouldBeASort t -> fsep $
-    --   [prettyTCM t] ++ pwords "should be a sort, but it isn't"
-    --
-    -- ShouldBePi t -> fsep $
-    --   [prettyTCM t] ++ pwords "should be a function type, but it isn't"
-    --
-    -- ShouldBePath t -> fsep $
-    --   [prettyTCM t] ++ pwords "should be a Path or PathP type, but it isn't"
-    --
-    -- NotAProperTerm -> fwords "Found a malformed term"
-    --
-    -- InvalidTypeSort s -> fsep $ [prettyTCM s] ++ pwords "is not a valid type"
-    -- InvalidType v -> fsep $ [prettyTCM v] ++ pwords "is not a valid type"
-    --
-    -- FunctionTypeInSizeUniv v -> fsep $
-    --   pwords "Functions may not return sizes, thus, function type " ++
-    --   [ prettyTCM v ] ++ pwords " is illegal"
-    --
-    -- SplitOnIrrelevant t -> fsep $
-    --   pwords "Cannot pattern match against" ++ [text $ verbalize $ getRelevance t] ++
-    --   pwords "argument of type" ++ [prettyTCM $ unDom t]
-    --
-    -- SplitOnNonVariable v t -> fsep $
-    --   pwords "Cannot pattern match because the (refined) argument " ++
-    --   [ prettyTCM v ] ++ pwords " is not a variable."
-    --
-    -- DefinitionIsIrrelevant x -> fsep $
-    --   text "Identifier" : prettyTCM x : pwords "is declared irrelevant, so it cannot be used here"
-    -- VariableIsIrrelevant x -> fsep $
-    --   text "Variable" : prettyTCM x : pwords "is declared irrelevant, so it cannot be used here"
-    -- UnequalBecauseOfUniverseConflict cmp s t -> fsep $
-    --   [prettyTCM s, notCmp cmp, prettyTCM t, text "because this would result in an invalid use of Setω" ]
-    --
-    -- UnequalTerms cmp s t a -> case (s,t) of
-    --   (Sort s1      , Sort s2      )
-    --     | CmpEq  <- cmp              -> prettyTCM $ UnequalSorts s1 s2
-    --     | CmpLeq <- cmp              -> prettyTCM $ NotLeqSort s1 s2
-    --   (Sort MetaS{} , t            ) -> prettyTCM $ ShouldBeASort $ El Inf t
-    --   (s            , Sort MetaS{} ) -> prettyTCM $ ShouldBeASort $ El Inf s
-    --   (_            , _            ) -> do
-    --     (d1, d2, d) <- prettyInEqual s t
-    --     fsep $ [return d1, notCmp cmp, return d2] ++ pwords "of type" ++ [prettyTCM a] ++ [return d]
-    --
+    ShouldBeASort t -> obj
+      [ "kind"            @= String "ShouldBeASort"
+      , "type"            #= prettyTCM t
+      ]
 
+    ShouldBePi t -> obj
+      [ "kind"            @= String "ShouldBePi"
+      , "type"            #= prettyTCM t
+      ]
+
+    ShouldBePath t -> obj
+      [ "kind"            @= String "ShouldBePath"
+      , "type"            #= prettyTCM t
+      ]
+
+    NotAProperTerm -> obj
+      [ "kind"            @= String "NotAProperTerm"
+      ]
+
+    InvalidTypeSort s -> obj
+      [ "kind"            @= String "InvalidTypeSort"
+      , "sort"            #= prettyTCM s
+      ]
+
+    InvalidType t -> obj
+      [ "kind"            @= String "InvalidType"
+      , "type"            #= prettyTCM t
+      ]
+
+    FunctionTypeInSizeUniv t -> obj
+      [ "kind"            @= String "FunctionTypeInSizeUniv"
+      , "term"            #= prettyTCM t
+      ]
+
+    SplitOnIrrelevant t ->obj
+      [ "kind"            @= String "SplitOnIrrelevant"
+      , "term"            @= verbalize (getRelevance t)
+      , "type"            #= prettyTCM (unDom t)
+      ]
+
+    SplitOnNonVariable term typ ->obj
+      [ "kind"            @= String "SplitOnNonVariable"
+      , "term"            #= prettyTCM term
+      , "type"            #= prettyTCM typ
+      ]
+
+
+    DefinitionIsIrrelevant x -> obj
+      [ "kind"            @= String "DefinitionIsIrrelevant"
+      , "name"            #= prettyTCM x
+      ]
+
+    VariableIsIrrelevant x -> obj
+      [ "kind"            @= String "VariableIsIrrelevant"
+      , "name"            #= prettyTCM x
+      ]
+
+    UnequalBecauseOfUniverseConflict cmp s t -> obj
+      [ "kind"            @= String "UnequalBecauseOfUniverseConflict"
+      , "comparison"      #= prettyTCM cmp
+      , "term1"           #= prettyTCM s
+      , "term2"           #= prettyTCM t
+      ]
+
+    UnequalTerms cmp s t a -> case refineUnequalTerms cmp s t of
+      Just err -> encodeTCM err
+      Nothing -> do
+        (_, _, d) <- prettyInEqual s t
+        obj
+          [ "kind"            @= String "UnequalTerms"
+          , "comparison"      #= prettyTCM cmp
+          , "term1"           #= prettyTCM s
+          , "term2"           #= prettyTCM t
+          , "type"            #= prettyTCM a
+          , "reason"          @= d
+          ]
 
     _ -> return $ object [ "kind" .= String "error not handled yet"]
 

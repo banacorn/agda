@@ -13,6 +13,8 @@ module Agda.TypeChecking.Errors
   , applyFlagsToTCWarnings
   , dropTopLevelModule
   , topLevelModuleDropper
+  , refineUnequalTerms
+  , prettyInEqual
   , Indefinite(..)
   , verbalize
   , stringTCErr
@@ -723,13 +725,9 @@ instance PrettyTCM TypeError where
     UnequalBecauseOfUniverseConflict cmp s t -> fsep $
       [prettyTCM s, notCmp cmp, prettyTCM t, text "because this would result in an invalid use of Setω" ]
 
-    UnequalTerms cmp s t a -> case (s,t) of
-      (Sort s1      , Sort s2      )
-        | CmpEq  <- cmp              -> prettyTCM $ UnequalSorts s1 s2
-        | CmpLeq <- cmp              -> prettyTCM $ NotLeqSort s1 s2
-      (Sort MetaS{} , t            ) -> prettyTCM $ ShouldBeASort $ El Inf t
-      (s            , Sort MetaS{} ) -> prettyTCM $ ShouldBeASort $ El Inf s
-      (_            , _            ) -> do
+    UnequalTerms cmp s t a -> case refineUnequalTerms cmp s t of
+      Just err -> prettyTCM err
+      Nothing -> do
         (d1, d2, d) <- prettyInEqual s t
         fsep $ [return d1, notCmp cmp, return d2] ++ pwords "of type" ++ [prettyTCM a] ++ [return d]
 
@@ -1293,6 +1291,16 @@ instance PrettyTCM TypeError where
 
 notCmp :: Comparison -> TCM Doc
 notCmp cmp = text "!" <> prettyTCM cmp
+
+-- | Refine UnequalTerms into other kind of TypeErrors
+refineUnequalTerms :: Comparison -> Term -> Term -> Maybe TypeError
+refineUnequalTerms cmp s t = case (s,t) of
+  (Sort s1      , Sort s2      )
+    | CmpEq  <- cmp              -> Just $ UnequalSorts s1 s2
+    | CmpLeq <- cmp              -> Just $ NotLeqSort s1 s2
+  (Sort MetaS{} , t            ) -> Just $ ShouldBeASort $ El Inf t
+  (s            , Sort MetaS{} ) -> Just $ ShouldBeASort $ El Inf s
+  (_            , _            ) -> Nothing
 
 -- | Print two terms that are supposedly unequal.
 --   If they print to the same identifier, add some explanation
