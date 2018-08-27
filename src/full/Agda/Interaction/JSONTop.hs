@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Agda.Interaction.JSONTop
@@ -5,10 +6,17 @@ module Agda.Interaction.JSONTop
     ) where
 import Control.Monad.State
 
+#if MIN_VERSION_base(4,11,0)
+import Prelude hiding ( (<>), null )
+#else
+import Prelude hiding ( null )
+#endif
+
 import Data.Aeson hiding (Result(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (on)
 import Data.List (nub, sortBy)
+import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Agda.Interaction.Encoding
@@ -24,16 +32,29 @@ import qualified Agda.Syntax.Fixity as F
 import qualified Agda.Syntax.Internal as I
 import qualified Agda.Syntax.Notation as N
 import Agda.Syntax.Position
-  (Range, Range'(..), Interval, Interval'(..), Position, Position'(..))
+  (Range, Range'(..), Interval, Interval'(..), Position, Position'(..), noRange
+  , getRange
+  )
 import qualified Agda.Syntax.Scope.Base as S
+import qualified Agda.Syntax.Scope.Monad as S
 import Agda.TypeChecking.Monad
-import Agda.TypeChecking.Errors (topLevelModuleDropper)
+import Agda.TypeChecking.Errors
+  (topLevelModuleDropper, verbalize, Indefinite(..))
+import Agda.TypeChecking.Pretty (prettyTCM, prettyA)
+import Agda.TypeChecking.Telescope (ifPiType)
+
 import Agda.Utils.Pretty
+import Agda.Utils.Maybe
 import qualified Agda.Utils.Maybe.Strict as Strict
 import Agda.Utils.FileName (AbsolutePath(..))
 import Agda.Utils.AssocList (AssocList)
 import qualified Agda.Utils.AssocList as Assoc
+import Agda.Utils.List (headMaybe)
+import Agda.Utils.Null
 import Agda.VersionCommit
+
+#include "undefined.h"
+import Agda.Utils.Impossible
 
 --------------------------------------------------------------------------------
 
@@ -159,50 +180,50 @@ instance EncodeTCM TCErr where
       , "typeError" .= typeError
       ]
   encodeTCM (Exception range doc) = return $ object
-    [ "kind" .= String "Exception"
-    , "range" .= range
+    [ "kind"        .= String "Exception"
+    , "range"       .= range
     , "description" .= toJSON (render doc)
     ]
   encodeTCM (IOException _ range exception) = return $ object
-    [ "kind" .= String "IOException"
-    , "range" .= range
+    [ "kind"      .= String "IOException"
+    , "range"     .= range
     , "exception" .= toJSON (show exception)
     ]
   encodeTCM PatternErr = return $ object
-    [ "kind" .= String "PatternErr"
+    [ "kind"  .= String "PatternErr"
     , "range" .= (NoRange :: Range)
     ]
 
 instance EncodeTCM TypeError where
   encodeTCM err = case err of
-    InternalError s -> return $ object
-      [ "kind" .= String "InternalError"
-      , "message" .= toJSON s
+    InternalError s -> obj
+      [ "kind"    @= String "InternalError"
+      , "message" @= s
       ]
 
-    NotImplemented s -> return $ object
-      [ "kind" .= String "NotImplemented"
-      , "message" .= toJSON s
+    NotImplemented s -> obj
+      [ "kind"    @= String "NotImplemented"
+      , "message" @= s
       ]
 
-    NotSupported s -> return $ object
-      [ "kind" .= String "NotSupported"
-      , "message" .= toJSON s
+    NotSupported s -> obj
+      [ "kind"    @= String "NotSupported"
+      , "message" @= s
       ]
 
-    CompilationError s -> return $ object
-      [ "kind" .= String "CompilationError"
-      , "message" .= toJSON s
+    CompilationError s -> obj
+      [ "kind"    @= String "CompilationError"
+      , "message" @= s
       ]
 
-    GenericError s -> return $ object
-      [ "kind" .= String "GenericError"
-      , "message" .= toJSON s
+    GenericError s -> obj
+      [ "kind"    @= String "GenericError"
+      , "message" @= s
       ]
 
-    GenericDocError d -> return $ object
-      [ "kind" .= String "GenericDocError"
-      , "message" .= toJSON (render d)
+    GenericDocError d -> obj
+      [ "kind"    @= String "GenericDocError"
+      , "message" @= (render d)
       ]
 
     TerminationCheckFailed because -> do
@@ -212,21 +233,299 @@ instance EncodeTCM TypeError where
       let functionNames = map dropTopLevel (concatMap termErrFunctions because)
       let problematicCalls = sortBy (compare `on` callInfoRange)
             $ (concatMap termErrCalls because)
-      return $ object
-        [ "kind" .= String "TerminationCheckFailed"
-        , "functions" .= functionNames
-        , "problematicCalls" .= problematicCalls
+      obj
+        [ "kind"              @= String "TerminationCheckFailed"
+        , "functions"         @= functionNames
+        , "problematicCalls"  @= problematicCalls
         ]
-    -- PropMustBeSingleton -> fwords
-    --   "Datatypes in Prop must have at most one constructor when proof irrelevance is enabled"
-    --
-    -- DataMustEndInSort t -> fsep $
-    --   pwords "The type of a datatype must end in a sort."
-    --   ++ [prettyTCM t] ++ pwords "isn't a sort."
 
+    PropMustBeSingleton -> obj
+      [ "kind"  @= String "PropMustBeSingleton" ]
+
+    DataMustEndInSort term -> obj
+      [ "kind"  @= String "DataMustEndInSort"
+      , "term"  #= prettyTCM term
+      ]
+
+    ShouldEndInApplicationOfTheDatatype t -> obj
+      [ "kind"  @= String "ShouldEndInApplicationOfTheDatatype"
+      , "type"  #= prettyTCM t
+      ]
+
+    ShouldBeAppliedToTheDatatypeParameters s t -> obj
+      [ "kind"      @= String "ShouldEndInApplicationOfTheDatatype"
+      , "expected"  #= prettyTCM s
+      , "actual"    #= prettyTCM t
+      ]
+
+    ShouldBeApplicationOf t q -> obj
+      [ "kind" @= String "ShouldBeApplicationOf"
+      , "type" #= prettyTCM t
+      , "name" #= prettyTCM q
+      ]
+
+    ShouldBeRecordType t -> obj
+      [ "kind"  @= String "ShouldBeRecordType"
+      , "type"  #= prettyTCM t
+      ]
+
+    ShouldBeRecordPattern p -> obj
+      [ "kind"    @= String "ShouldBeRecordPattern"
+      , "pattern" #= prettyTCM p
+      ]
+
+    NotAProjectionPattern p -> obj
+      [ "kind"    @= String "NotAProjectionPattern"
+      , "pattern" #= prettyA p
+      ]
+
+    DifferentArities -> obj
+      [ "kind" @= String "DifferentArities" ]
+
+    WrongHidingInLHS -> obj
+      [ "kind" @= String "WrongHidingInLHS" ]
+
+    WrongHidingInLambda t -> obj
+      [ "kind" @= String "WrongHidingInLambda"
+      , "type" #= prettyTCM t
+      ]
+
+    WrongIrrelevanceInLambda -> obj
+      [ "kind" @= String "WrongIrrelevanceInLambda" ]
+
+    WrongNamedArgument a -> obj
+      [ "kind" @= String "WrongNamedArgument"
+      , "args" #= prettyTCM a
+      ]
+
+    WrongHidingInApplication t -> obj
+      [ "kind" @= String "WrongHidingInApplication"
+      , "type" #= prettyTCM t
+      ]
+
+    WrongInstanceDeclaration -> obj
+      [ "kind" @= String "WrongInstanceDeclaration" ]
+
+    HidingMismatch h h' -> obj
+      [ "kind"      @= String "HidingMismatch"
+      , "expected"  @= verbalize (Indefinite h')
+      , "actual"    @= verbalize (Indefinite h)
+      ]
+
+    RelevanceMismatch r r' -> obj
+      [ "kind"      @= String "RelevanceMismatch"
+      , "expected"  @= verbalize (Indefinite r')
+      , "actual"    @= verbalize (Indefinite r)
+      ]
+
+    UninstantiatedDotPattern e -> obj
+        [ "kind" @= String "UninstantiatedDotPattern"
+        , "expr" #= prettyTCM e
+        ]
+
+    ForcedConstructorNotInstantiated p -> obj
+        [ "kind"    @= String "ForcedConstructorNotInstantiated"
+        , "pattern" #= prettyA p
+        ]
+
+    IlltypedPattern p a -> ifPiType a yes no
+      where
+        yes dom abs = obj
+          [ "kind"      @= String "IlltypedPattern"
+          , "isPiType"  @= True
+          , "pattern"   #= prettyA p
+          , "dom"       #= prettyTCM dom
+          , "abs"       @= show abs
+          ]
+        no t = obj
+          [ "kind"      @= String "IlltypedPattern"
+          , "isPiType"  @= False
+          , "pattern"   #= prettyA p
+          , "type"      #= prettyTCM t
+          ]
+
+
+    IllformedProjectionPattern p -> obj
+        [ "kind"    @= String "IllformedProjectionPattern"
+        , "pattern" #= prettyA p
+        ]
+
+    CannotEliminateWithPattern p a -> do
+      if isJust (A.isProjP p) then
+        obj
+          [ "kind"          @= String "CannotEliminateWithPattern"
+          , "isProjection"  @= True
+          , "pattern"       #= prettyA p
+          ]
+      else
+        obj
+          [ "kind"          @= String "CannotEliminateWithPattern"
+          , "isProjection"  @= False
+          , "pattern"       #= prettyA p
+          , "patternLind"   @= (kindOfPattern (namedArg p))
+          ]
+      where
+        kindOfPattern arg = case arg of
+          A.VarP    {} -> String "variable"
+          A.ConP    {} -> String "constructor"
+          A.ProjP   {} -> __IMPOSSIBLE__
+          A.DefP    {} -> __IMPOSSIBLE__
+          A.WildP   {} -> String "wildcard"
+          A.DotP    {} -> String "dot"
+          A.AbsurdP {} -> String "absurd"
+          A.LitP    {} -> String "literal"
+          A.RecP    {} -> String "record"
+          A.WithP   {} -> String "with"
+          A.EqualP  {} -> String "equality"
+          A.AsP _ _ p -> kindOfPattern p
+          A.PatternSynP {} -> __IMPOSSIBLE__
+
+    WrongNumberOfConstructorArguments name expected actual -> obj
+      [ "kind"      @= String "WrongNumberOfConstructorArguments"
+      , "name"      #= prettyTCM name
+      , "expected"  #= prettyTCM expected
+      , "actual"    #= prettyTCM actual
+      ]
+
+    CantResolveOverloadedConstructorsTargetingSameDatatype datatype ctrs -> do
+      obj
+        [ "kind"          @= String "CantResolveOverloadedConstructorsTargetingSameDatatype"
+        , "datatype"      #= prettyTCM (I.qnameToConcrete datatype)
+        , "constructors"  #= mapM prettyTCM ctrs
+        ]
+
+    DoesNotConstructAnElementOf c t -> obj
+      [ "kind"        @= String "DoesNotConstructAnElementOf"
+      , "constructor" #= prettyTCM c
+      , "type"        #= prettyTCM t
+      ]
+
+    ConstructorPatternInWrongDatatype c d -> obj
+      [ "kind"        @= String "ConstructorPatternInWrongDatatype"
+      , "constructor" #= prettyTCM c
+      , "datatype"    #= prettyTCM d
+      ]
+
+    ShadowedModule x [] -> __IMPOSSIBLE__
+    ShadowedModule x ms@(m0 : _) -> do
+      -- Clash! Concrete module name x already points to the abstract names ms.
+      (r, m) <- do
+        -- Andreas, 2017-07-28, issue #719.
+        -- First, we try to find whether one of the abstract names @ms@ points back to @x@
+        scope <- getScope
+        -- Get all pairs (y,m) such that y points to some m ∈ ms.
+        let xms0 = ms >>= \ m -> map (,m) $ S.inverseScopeLookupModule m scope
+        reportSLn "scope.clash.error" 30 $ "candidates = " ++ prettyShow xms0
+
+        -- Try to find x (which will have a different Range, if it has one (#2649)).
+        let xms = filter ((\ y -> not (null $ getRange y) && y == C.QName x) . fst) xms0
+        reportSLn "scope.class.error" 30 $ "filtered candidates = " ++ prettyShow xms
+
+        -- If we found a copy of x with non-empty range, great!
+        ifJust (headMaybe xms) (\ (x', m) -> return (getRange x', m)) $ {-else-} do
+
+        -- If that failed, we pick the first m from ms which has a nameBindingSite.
+        let rms = ms >>= \ m -> map (,m) $
+              filter (noRange /=) $ map A.nameBindingSite $ reverse $ A.mnameToList m
+              -- Andreas, 2017-07-25, issue #2649
+              -- Take the first nameBindingSite we can get hold of.
+        reportSLn "scope.class.error" 30 $ "rangeful clashing modules = " ++ prettyShow rms
+
+        -- If even this fails, we pick the first m and give no range.
+        return $ fromMaybe (noRange, m0) $ headMaybe rms
+
+      obj
+        [ "kind"        @= String "ShadowedModule"
+        , "duplicated"  #= prettyTCM x
+        , "previous"    #= prettyTCM r
+        , "isDatatype"  #= S.isDatatypeModule m
+        ]
+
+
+    ModuleArityMismatch m I.EmptyTel args -> obj
+      [ "kind"            @= String "ModuleArityMismatch"
+      , "module"          #= prettyTCM m
+      , "isParameterized" @= False
+      ]
+    ModuleArityMismatch m tel@(I.ExtendTel _ _) args -> obj
+      [ "kind"            @= String "ModuleArityMismatch"
+      , "module"          #= prettyTCM m
+      , "isParameterized" @= True
+      , "telescope"       #= prettyTCM tel
+      ]
+
+    -- ShouldBeEmpty t ps -> obj
+    --   [ "kind"            @= String "ShouldBeEmpty"
+    --   , "type"          #= prettyTCM t
+    --   , "patterns" #= mapM (prettyPat 0) ps
+    --   ]
+
+    -- ShouldBeASort t -> fsep $
+    --   [prettyTCM t] ++ pwords "should be a sort, but it isn't"
+    --
+    -- ShouldBePi t -> fsep $
+    --   [prettyTCM t] ++ pwords "should be a function type, but it isn't"
+    --
+    -- ShouldBePath t -> fsep $
+    --   [prettyTCM t] ++ pwords "should be a Path or PathP type, but it isn't"
+    --
+    -- NotAProperTerm -> fwords "Found a malformed term"
+    --
+    -- InvalidTypeSort s -> fsep $ [prettyTCM s] ++ pwords "is not a valid type"
+    -- InvalidType v -> fsep $ [prettyTCM v] ++ pwords "is not a valid type"
+    --
+    -- FunctionTypeInSizeUniv v -> fsep $
+    --   pwords "Functions may not return sizes, thus, function type " ++
+    --   [ prettyTCM v ] ++ pwords " is illegal"
+    --
+    -- SplitOnIrrelevant t -> fsep $
+    --   pwords "Cannot pattern match against" ++ [text $ verbalize $ getRelevance t] ++
+    --   pwords "argument of type" ++ [prettyTCM $ unDom t]
+    --
+    -- SplitOnNonVariable v t -> fsep $
+    --   pwords "Cannot pattern match because the (refined) argument " ++
+    --   [ prettyTCM v ] ++ pwords " is not a variable."
+    --
+    -- DefinitionIsIrrelevant x -> fsep $
+    --   text "Identifier" : prettyTCM x : pwords "is declared irrelevant, so it cannot be used here"
+    -- VariableIsIrrelevant x -> fsep $
+    --   text "Variable" : prettyTCM x : pwords "is declared irrelevant, so it cannot be used here"
+    -- UnequalBecauseOfUniverseConflict cmp s t -> fsep $
+    --   [prettyTCM s, notCmp cmp, prettyTCM t, text "because this would result in an invalid use of Setω" ]
+    --
+    -- UnequalTerms cmp s t a -> case (s,t) of
+    --   (Sort s1      , Sort s2      )
+    --     | CmpEq  <- cmp              -> prettyTCM $ UnequalSorts s1 s2
+    --     | CmpLeq <- cmp              -> prettyTCM $ NotLeqSort s1 s2
+    --   (Sort MetaS{} , t            ) -> prettyTCM $ ShouldBeASort $ El Inf t
+    --   (s            , Sort MetaS{} ) -> prettyTCM $ ShouldBeASort $ El Inf s
+    --   (_            , _            ) -> do
+    --     (d1, d2, d) <- prettyInEqual s t
+    --     fsep $ [return d1, notCmp cmp, return d2] ++ pwords "of type" ++ [prettyTCM a] ++ [return d]
+    --
 
 
     _ -> return $ object [ "kind" .= String "error not handled yet"]
+
+    -- where
+    --   mpar n args
+    --     | n > 0 && not (null args) = parens
+    --     | otherwise                = id
+    --
+    --   prettyArg :: Arg (I.Pattern' a) -> TCM Doc
+    --   prettyArg (Arg info x) = case getHiding info of
+    --     Hidden     -> braces $ prettyPat 0 x
+    --     Instance{} -> dbraces $ prettyPat 0 x
+    --     NotHidden  -> prettyPat 1 x
+    --
+    --   prettyPat :: Integer -> (I.Pattern' a) -> TCM Doc
+    --   prettyPat _ (I.VarP _ _) = text "_"
+    --   prettyPat _ (I.DotP _ _) = text "._"
+    --   prettyPat n (I.ConP c _ args) =
+    --     mpar n args $
+    --       prettyTCM c <+> fsep (map (prettyArg . fmap namedThing) args)
+    --   prettyPat _ (I.LitP l) = prettyTCM l
+    --   prettyPat _ (I.ProjP _ p) = text "." <> prettyTCM p
 
 --------------------------------------------------------------------------------
 -- Agda.TypeChecking.Monad.Base

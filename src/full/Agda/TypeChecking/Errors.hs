@@ -13,6 +13,8 @@ module Agda.TypeChecking.Errors
   , applyFlagsToTCWarnings
   , dropTopLevelModule
   , topLevelModuleDropper
+  , Indefinite(..)
+  , verbalize
   , stringTCErr
   , sayWhen
   ) where
