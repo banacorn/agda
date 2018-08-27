@@ -507,26 +507,6 @@ instance EncodeTCM TypeError where
 
     _ -> return $ object [ "kind" .= String "error not handled yet"]
 
-    -- where
-    --   mpar n args
-    --     | n > 0 && not (null args) = parens
-    --     | otherwise                = id
-    --
-    --   prettyArg :: Arg (I.Pattern' a) -> TCM Doc
-    --   prettyArg (Arg info x) = case getHiding info of
-    --     Hidden     -> braces $ prettyPat 0 x
-    --     Instance{} -> dbraces $ prettyPat 0 x
-    --     NotHidden  -> prettyPat 1 x
-    --
-    --   prettyPat :: Integer -> (I.Pattern' a) -> TCM Doc
-    --   prettyPat _ (I.VarP _ _) = text "_"
-    --   prettyPat _ (I.DotP _ _) = text "._"
-    --   prettyPat n (I.ConP c _ args) =
-    --     mpar n args $
-    --       prettyTCM c <+> fsep (map (prettyArg . fmap namedThing) args)
-    --   prettyPat _ (I.LitP l) = prettyTCM l
-    --   prettyPat _ (I.ProjP _ p) = text "." <> prettyTCM p
-
 --------------------------------------------------------------------------------
 -- Agda.TypeChecking.Monad.Base
 

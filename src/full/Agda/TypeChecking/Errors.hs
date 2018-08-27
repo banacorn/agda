@@ -688,7 +688,7 @@ instance PrettyTCM TypeError where
     ShouldBeEmpty t ps -> fsep (
       [prettyTCM t] ++
       pwords "should be empty, but the following constructor patterns are valid:"
-      ) $$ nest 2 (vcat $ map (prettyPat 0) ps)
+      ) $$ nest 2 (vcat $ map (prettyPattern 0) ps)
 
     ShouldBeASort t -> fsep $
       [prettyTCM t] ++ pwords "should be a sort, but it isn't"
@@ -1290,26 +1290,6 @@ instance PrettyTCM TypeError where
     InstanceSearchDepthExhausted c a d -> fsep $
       pwords ("Instance search depth exhausted (max depth: " ++ show d ++ ") for candidate") ++
       [hang (prettyTCM c <+> text ":") 2 (prettyTCM a)]
-
-    where
-    mpar n args
-      | n > 0 && not (null args) = parens
-      | otherwise                = id
-
-    prettyArg :: Arg (I.Pattern' a) -> TCM Doc
-    prettyArg (Arg info x) = case getHiding info of
-      Hidden     -> braces $ prettyPat 0 x
-      Instance{} -> dbraces $ prettyPat 0 x
-      NotHidden  -> prettyPat 1 x
-
-    prettyPat :: Integer -> (I.Pattern' a) -> TCM Doc
-    prettyPat _ (I.VarP _ _) = text "_"
-    prettyPat _ (I.DotP _ _) = text "._"
-    prettyPat n (I.ConP c _ args) =
-      mpar n args $
-        prettyTCM c <+> fsep (map (prettyArg . fmap namedThing) args)
-    prettyPat _ (I.LitP l) = prettyTCM l
-    prettyPat _ (I.ProjP _ p) = text "." <> prettyTCM p
 
 notCmp :: Comparison -> TCM Doc
 notCmp cmp = text "!" <> prettyTCM cmp
