@@ -9,12 +9,11 @@ import Data.Aeson
 import Agda.Interaction.JSON.Syntax.Concrete.Name
 import {-# SOURCE #-} Agda.Interaction.JSON.Syntax.Fixity
 import Agda.Interaction.JSON.Syntax.Position
-import Agda.Interaction.JSON.Utils
 
 import Agda.Syntax.Abstract
 
 --------------------------------------------------------------------------------
--- Agda.Syntax.Abstract.Name
+-- | Instances of ToJSON
 
 instance ToJSON Name where
   toJSON (Name name concrete bindingSite fixity) = object

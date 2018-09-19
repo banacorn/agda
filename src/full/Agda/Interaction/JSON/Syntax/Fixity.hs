@@ -6,13 +6,17 @@ module Agda.Interaction.JSON.Syntax.Fixity where
 
 import Data.Aeson
 
+import Agda.Interaction.JSON.Encode
 import Agda.Interaction.JSON.Syntax.Abstract
 import Agda.Interaction.JSON.Syntax.Concrete.Name
 import Agda.Interaction.JSON.Syntax.Position
 import Agda.Interaction.JSON.Syntax.Notation
-import Agda.Interaction.JSON.Utils
 
 import Agda.Syntax.Fixity
+
+--------------------------------------------------------------------------------
+
+instance EncodeTCM NotationSection
 
 --------------------------------------------------------------------------------
 

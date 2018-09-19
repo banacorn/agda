@@ -9,7 +9,6 @@ import Data.Aeson
 import Agda.Interaction.JSON.Syntax.Common
 import Agda.Interaction.JSON.Syntax.Abstract
 import Agda.Interaction.JSON.Syntax.Position
-import Agda.Interaction.JSON.Utils
 
 import Agda.Syntax.Literal
 

@@ -4,19 +4,75 @@
 
 module Agda.Interaction.JSON.Syntax.Concrete where
 
+import Control.Monad ((>=>))
 import Data.Aeson
 
+import Agda.Interaction.JSON.Encode
 import Agda.Interaction.JSON.Syntax.Concrete.Name
 import Agda.Interaction.JSON.Syntax.Fixity
 import Agda.Interaction.JSON.Syntax.Literal
 import Agda.Interaction.JSON.Syntax.Position
 import Agda.Interaction.JSON.TypeChecking.Positivity
 
+import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Concrete
 import Agda.Syntax.Concrete.Pretty (smashTel)
 import Agda.Syntax.Concrete.Definitions
+import qualified Agda.Syntax.Translation.AbstractToConcrete as A2C
 
 --------------------------------------------------------------------------------
+-- | Instances of EncodeTCM
+
+instance EncodeTCM Declaration
+instance EncodeTCM DeclarationWarning
+instance EncodeTCM Expr
+instance EncodeTCM Pattern
+instance EncodeTCM BoundName
+instance EncodeTCM Pragma
+
+instance EncodeTCM A.Pattern where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.Expr where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.ModuleName where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.Declaration where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.Clause where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.SpineClause where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM A.LetBinding where
+  encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+-- instance (EncodeTCM a, A2C.ToConcrete a LHS) => EncodeTCM (A.Clause' a) where
+--   encodeTCM = A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM a => EncodeTCM (TypedBindings' a) where
+  encodeTCM (TypedBindings range arg) = obj
+    [ "range"     @= range
+    , "arg"       @= arg
+    ]
+
+instance EncodeTCM a => EncodeTCM (TypedBinding' a) where
+  encodeTCM (TBind range bindings value) = kind "TBind"
+    [ "range"     @= range
+    , "bindings"  @= bindings
+    , "value"     @= value
+    ]
+  encodeTCM (TLet range declarations) = kind "TLet"
+    [ "range"         @= range
+    , "declarations"  @= declarations
+    ]
+
+--------------------------------------------------------------------------------
+-- | Instances of ToJSON
 
 instance ToJSON a => ToJSON (OpApp a) where
   toJSON (SyntaxBindingLambda range bindings value) = object

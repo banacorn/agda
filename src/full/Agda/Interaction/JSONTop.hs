@@ -35,52 +35,39 @@ jsonREPL = repl (liftIO . BS.putStrLn <=< return . encode <=< encodeTCM) "JSON> 
 instance EncodeTCM Response where
   encodeTCM (Resp_HighlightingInfo info remove method modFile) =
     liftIO (encodeHighlightingInfo info remove method modFile)
-  encodeTCM (Resp_DisplayInfo info) = obj
-    [ "kind" @= String "DisplayInfo"
-    , "info" #= encodeTCM info
+  encodeTCM (Resp_DisplayInfo info) = kind "DisplayInfo"
+    [ "info"              @= info
     ]
-  encodeTCM (Resp_ClearHighlighting tokenBased) = obj
-    [ "kind"          @= String "ClearHighlighting"
-    , "tokenBased"    @= tokenBased
+  encodeTCM (Resp_ClearHighlighting tokenBased) = kind "ClearHighlighting"
+    [ "tokenBased"        %= tokenBased
     ]
-  encodeTCM Resp_DoneAborting = obj
-    [ "kind"          @= String "DoneAborting"
+  encodeTCM Resp_DoneAborting                 = kind "DoneAborting" []
+  encodeTCM Resp_ClearRunningInfo             = kind "ClearRunningInfo" []
+  encodeTCM (Resp_RunningInfo debugLevel msg) = kind "RunningInfo"
+    [ "debugLevel"        @= debugLevel
+    , "message"           @= msg
     ]
-  encodeTCM Resp_ClearRunningInfo = obj
-    [ "kind"          @= String "ClearRunningInfo"
-    ]
-  encodeTCM (Resp_RunningInfo debugLevel msg) = obj
-    [ "kind"          @= String "RunningInfo"
-    , "debugLevel"    @= debugLevel
-    , "message"       @= msg
-    ]
-  encodeTCM (Resp_Status status) = obj
-    [ "kind"                  @= String "Status"
-    , "showImplicitArguments" @= sShowImplicitArguments status
+  encodeTCM (Resp_Status status) = kind "Status"
+    [ "showImplicitArguments" @= sShowImplicitArguments status
     , "checked"               @= sChecked status
     ]
-  encodeTCM (Resp_JumpToError filepath position) = obj
-    [ "kind"          @= String "JumpToError"
-    , "filepath"      @= filepath
-    , "position"      @= position
+  encodeTCM (Resp_JumpToError filepath position) = kind "JumpToError"
+    [ "filepath"          @= filepath
+    , "position"          %= position
     ]
-  encodeTCM (Resp_InteractionPoints interactionPoints) = obj
-    [ "kind"              @= String "InteractionPoints"
-    , "interactionPoints" @= interactionPoints
+  encodeTCM (Resp_InteractionPoints interactionPoints) = kind "InteractionPoints"
+    [ "interactionPoints" %= interactionPoints
     ]
-  encodeTCM (Resp_GiveAction i giveResult) = obj
-    [ "kind"              @= String "GiveAction"
-    , "interactionPoint"  @= i
-    , "giveResult"        @= giveResult
+  encodeTCM (Resp_GiveAction i giveResult) = kind "GiveAction"
+    [ "interactionPoint"  %= i
+    , "giveResult"        %= giveResult
     ]
-  encodeTCM (Resp_MakeCase variant clauses) = obj
-    [ "kind"          @= String "MakeCase"
-    , "variant"       @= variant
-    , "clauses"       @= clauses
+  encodeTCM (Resp_MakeCase variant clauses) = kind "MakeCase"
+    [ "variant"           %= variant
+    , "clauses"           @= clauses
     ]
-  encodeTCM (Resp_SolveAll solutions) = obj
-    [ "kind"          @= String "SolveAll"
-    , "solutions"     @= map encodeSolution solutions
+  encodeTCM (Resp_SolveAll solutions) = kind "SolveAll"
+    [ "solutions"         @= map encodeSolution solutions
     ]
     where
       encodeSolution (i, expr) = object
@@ -91,56 +78,62 @@ instance EncodeTCM Response where
 --------------------------------------------------------------------------------
 
 instance EncodeTCM DisplayInfo where
-  encodeTCM (Info_CompilationOk warnings errors) = obj
-    [ "kind"        @= String "CompilationOk"
-    , "warnings"    @= warnings
-    , "errors"      @= errors
+  encodeTCM (Info_CompilationOk warnings errors) = kind "CompilationOk"
+    [ "warnings"            @= warnings
+    , "errors"              @= errors
     ]
-  encodeTCM (Info_Constraints constraints) = obj
-    [ "kind"        @= String "Constraints"
-    , "constraints" @= constraints
+  encodeTCM (Info_Constraints constraints) = kind "Constraints"
+    [ "constraints"         @= constraints
     ]
-  encodeTCM (Info_AllGoalsWarnings (AllGoalsWarnings ims hms ws es) _ _ _) = obj
-    [ "kind"              @= String "AllGoalsWarnings"
-    , "interactionMetas"  @= ims
-    , "hiddenMetas"       @= hms
-    , "warnings"          #= mapM encodeTCM ws
-    , "errors"            #= mapM encodeTCM es
+  encodeTCM (Info_AllGoalsWarnings (AllGoalsWarnings ims hms ws es) _ _ _) =
+    kind "AllGoalsWarnings"
+      [ "interactionMetas"  @= ims
+      , "hiddenMetas"       @= hms
+      , "warnings"          @= ws
+      , "errors"            @= es
+      ]
+  encodeTCM (Info_Time doc) = kind "Time"
+    [ "payload"             @= doc
     ]
-  encodeTCM (Info_Time doc) = obj
-    [ "kind"        @= String "Time"
-    , "payload"     @= render doc
+  encodeTCM (Info_Error err msg) = kind "Error"
+    [ "error"               @= err
+    , "emacsMessage"        @= msg
     ]
-  encodeTCM (Info_Error err msg) = obj
-    [ "kind"          @= String "Error"
-    , "error"         #= encodeTCM err
-    , "emacsMessage"  @= msg
+  encodeTCM (Info_Intro doc) = kind "Intro"
+    [ "payload"             @= doc
     ]
-  encodeTCM (Info_Intro doc) = obj
-    [ "kind" @= String "Intro", "payload" @= render doc ]
-  encodeTCM (Info_Auto msg) = obj
-    [ "kind" @= String "Auto", "payload" @= msg ]
-  encodeTCM (Info_ModuleContents doc) = obj
-    [ "kind" @= String "ModuleContents", "payload" @= render doc ]
-  encodeTCM (Info_SearchAbout doc) = obj
-    [ "kind" @= String "SearchAbout", "payload" @= render doc ]
-  encodeTCM (Info_WhyInScope doc) = obj
-    [ "kind" @= String "WhyInScope", "payload" @= render doc ]
-  encodeTCM (Info_NormalForm doc) = obj
-    [ "kind" @= String "NormalForm", "payload" @= render doc ]
-  encodeTCM (Info_GoalType doc) = obj
-    [ "kind" @= String "GoalType", "payload" @= render doc ]
-  encodeTCM (Info_CurrentGoal doc) = obj
-    [ "kind" @= String "CurrentGoal", "payload" @= render doc ]
-  encodeTCM (Info_InferredType doc) = obj
-    [ "kind" @= String "InferredType", "payload" @= render doc ]
-  encodeTCM (Info_Context doc) = obj
-    [ "kind" @= String "Context", "payload" @= render doc ]
-  encodeTCM (Info_HelperFunction doc) = obj
-    [ "kind" @= String "HelperFunction", "payload" @= render doc ]
-  encodeTCM Info_Version = obj
-    [ "kind"    @= String "Version"
-    , "version" @= (("Agda version " ++ versionWithCommitInfo) :: String)
+  encodeTCM (Info_Auto msg) = kind "Auto"
+    [ "payload"             @= msg
+    ]
+  encodeTCM (Info_ModuleContents doc) = kind "ModuleContents"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_SearchAbout doc) = kind "SearchAbout"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_WhyInScope doc) = kind "WhyInScope"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_NormalForm doc) = kind "NormalForm"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_GoalType doc) = kind "GoalType"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_CurrentGoal doc) = kind "CurrentGoal"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_InferredType doc) = kind "InferredType"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_Context doc) = kind "Context"
+    [ "payload"             @= doc
+    ]
+  encodeTCM (Info_HelperFunction doc) = kind "HelperFunctio"
+    [ "payload"             @= doc
+    ]
+  encodeTCM Info_Version = kind "Version"
+    [ "version"             @= (("Agda version " ++ versionWithCommitInfo) :: String)
     ]
 
 --------------------------------------------------------------------------------
@@ -156,6 +149,7 @@ instance ToJSON MakeCaseVariant where
 
 --------------------------------------------------------------------------------
 
+instance (EncodeTCM a, EncodeTCM b, ToJSON a, ToJSON b) => EncodeTCM (OutputConstraint a b) where
 instance (ToJSON a, ToJSON b) => ToJSON (OutputConstraint a b) where
   toJSON o = case o of
     OfType e t -> object

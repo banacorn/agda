@@ -1,16 +1,66 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 -- | Instances of EncodeTCM or ToJSON under Agda.Syntax.Common
 
 module Agda.Interaction.JSON.Syntax.Common where
 
+import Control.Monad ((>=>))
 import Data.Aeson
 
+import Agda.Interaction.JSON.Encode
 import Agda.Interaction.JSON.Syntax.Position
-import Agda.Interaction.JSON.Utils
 import Agda.Syntax.Common
+import qualified Agda.Syntax.Translation.InternalToAbstract as I2A
+import qualified Agda.Syntax.Translation.AbstractToConcrete as A2C
 
 --------------------------------------------------------------------------------
+-- | Instances of EncodeTCM
+
+instance EncodeTCM DataOrRecord
+instance EncodeTCM Hiding
+instance EncodeTCM ArgInfo
+instance EncodeTCM MetaId
+instance EncodeTCM ProjOrigin
+
+instance (EncodeTCM a, EncodeTCM b) => EncodeTCM (ImportedName' a b) where
+  encodeTCM (ImportedModule value) = kind "ImportedModule"
+    [ "value"       @= value
+    ]
+  encodeTCM (ImportedName value) = kind "ImportedName"
+    [ "value"       @= value
+    ]
+
+instance (EncodeTCM a) => EncodeTCM (Arg a) where
+  encodeTCM (Arg argInfo value) = obj
+    [ "argInfo"     @= argInfo
+    , "value"       @= value
+    ]
+
+instance (EncodeTCM name, EncodeTCM a) => EncodeTCM (Named name a) where
+  encodeTCM (Named name value) = obj
+    [ "name"        @= name
+    , "value"       @= value
+    ]
+
+instance EncodeTCM a => EncodeTCM (Ranged a) where
+  encodeTCM (Ranged range value) = obj
+    [ "range"       @= range
+    , "value"       @= value
+    ]
+
+instance (I2A.Reify i a, A2C.ToConcrete a c, EncodeTCM c) => EncodeTCM (Dom i) where
+  encodeTCM = I2A.reify >=> A2C.abstractToConcrete_ >=> encodeTCM
+
+instance EncodeTCM a => EncodeTCM (WithHiding a) where
+  encodeTCM (WithHiding hiding value) = obj
+    [ "hiding"      @= hiding
+    , "value"       @= value
+    ]
+
+
+--------------------------------------------------------------------------------
+-- | Instances of ToJSON
 
 instance ToJSON HasEta where
   toJSON NoEta  = String "NoEta"
