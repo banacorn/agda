@@ -71,7 +71,7 @@ import Agda.Utils.Pretty (prettyShow, render)
 import qualified Agda.Utils.IO.UTF8 as UTF8
 import Agda.Utils.String
 
-import Paths_Agda
+import qualified Paths_Agda
 
 import Agda.Utils.Impossible
 
@@ -1207,7 +1207,7 @@ type MonadGHCIO m = (MonadIO m, ReadGHCOpts m)
 
 copyRTEModules :: MonadGHCIO m => m ()
 copyRTEModules = do
-  dataDir <- liftIO getDataDir
+  dataDir <- liftIO Paths_Agda.getDataDir
   let srcDir = dataDir </> "MAlonzo" </> "src"
   dstDir <- optGhcCompileDir <$> askGhcOpts
   liftIO $ copyDirContent srcDir dstDir

@@ -13,7 +13,7 @@ import Data.Maybe
 import System.Environment
 import System.Console.GetOpt
 
-import Paths_Agda            ( getDataDir )
+import qualified Paths_Agda
 
 import Agda.Interaction.CommandLine
 import Agda.Interaction.ExitCode (AgdaError(..), exitSuccess, exitAgdaWith)
@@ -241,7 +241,7 @@ printVersion backends = do
     | Backend Backend'{ backendName = name, backendVersion = Just ver } <- backends ]
 
 printAgdaDir :: IO ()
-printAgdaDir = putStrLn =<< getDataDir
+printAgdaDir = putStrLn =<< Paths_Agda.getDataDir
 
 -- | What to do for bad options.
 optionError :: String -> IO ()

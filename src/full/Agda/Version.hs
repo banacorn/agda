@@ -7,13 +7,13 @@ import GHC.Generics ( Generic, Rep, packageName )
 import Data.List ( intercalate )
 import Data.Version ( Version(versionBranch) )
 
-import qualified Paths_Agda as PA
+import qualified Paths_Agda
 
 -- | The version of Agda.
 
 version :: String
 version = intercalate "." $ map show $
-            versionBranch PA.version
+            versionBranch Paths_Agda.version
 
 -- | This package name.
 -- This is mainly intended for use in the test suites to filter ephemeral

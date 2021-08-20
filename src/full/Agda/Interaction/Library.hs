@@ -76,7 +76,7 @@ import Agda.Utils.String ( trim )
 import Agda.Version
 
 -- Paths_Agda.hs is in $(BUILD_DIR)/build/autogen/.
-import Paths_Agda ( getDataFileName )
+import qualified Paths_Agda
 
 ------------------------------------------------------------------------
 -- * Types and Monads
@@ -129,7 +129,7 @@ getAgdaAppDir = do
 -- store the Primitive.agda file.
 getPrimitiveLibDir :: IO FilePath
 getPrimitiveLibDir = do
-  libdir <- filePath <$> (absolute =<< getDataFileName "lib")
+  libdir <- filePath <$> (absolute =<< Paths_Agda.getDataFileName "lib")
   ifM (doesDirectoryExist libdir)
       (return $ libdir </> "prim")
       (error $ "The lib directory " ++ libdir ++ " does not exist")

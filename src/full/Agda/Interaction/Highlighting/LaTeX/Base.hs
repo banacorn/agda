@@ -41,7 +41,7 @@ import qualified Data.HashSet as Set
 import qualified Data.IntMap  as IntMap
 import qualified Data.List    as List
 
-import Paths_Agda
+import qualified Paths_Agda
 
 import Agda.Syntax.Abstract (toTopLevelModuleName)
 import Agda.Syntax.Common
@@ -700,7 +700,7 @@ prepareCommonAssets dir = do
       (T.pack $ unwords [defaultStyFile, "was not found. Copying a default version of", defaultStyFile, "into", dir])
       []
     liftIO $ do
-      styFile <- getDataFileName $
+      styFile <- Paths_Agda.getDataFileName $
         latexDataDir </> defaultStyFile
       copyFile styFile (dir </> defaultStyFile)
 

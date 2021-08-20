@@ -23,7 +23,7 @@ import System.Environment ( setEnv )
 import System.FilePath    ( splitFileName, (</>) )
 import System.Process     ( callCommand )
 
-import Paths_Agda
+import qualified Paths_Agda
 
 import Agda.Interaction.Options
 
@@ -167,7 +167,7 @@ jsPostCompile opts _ ms = do
 
   compDir  <- compileDir
   liftIO $ do
-    dataDir <- getDataDir
+    dataDir <- Paths_Agda.getDataDir
     let srcDir = dataDir </> "JS"
     copyDirContent srcDir compDir
 
