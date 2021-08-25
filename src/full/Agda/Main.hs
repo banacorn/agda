@@ -64,7 +64,9 @@ runAgda' backends = do
     Right (bs, opts, mode) -> case mode of
       MainModePrintHelp hp   -> printUsage bs hp
       MainModePrintVersion   -> printVersion bs
-      MainModePrintAgdaDir   -> printAgdaDir
+      MainModePrintAgdaDir   -> case optAgdaDir opts of 
+                                  Nothing -> printAgdaDir
+                                  Just path -> putStrLn path
       MainModeRun interactor -> runTCMPrettyErrors $ do
         setTCLens stBackends bs
         runAgdaWithOptions interactor progName opts

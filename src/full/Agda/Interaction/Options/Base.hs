@@ -100,6 +100,8 @@ data CommandLineOptions = Options
   -- ^ look for .agda-lib files
   , optTrustedExecutables             :: Map ExeName FilePath
   -- ^ Map names of trusted executables to absolute paths
+  , optAgdaDir       :: Maybe FilePath
+  -- ^ In the absence of a path the one from Paths_Agda is used.
   , optPrintAgdaDir          :: Bool
   , optPrintVersion          :: Bool
   , optPrintHelp             :: Maybe Help
@@ -239,6 +241,7 @@ defaultOptions = Options
   , optDefaultLibs           = True
   , optUseLibs               = True
   , optTrustedExecutables    = Map.empty
+  , optAgdaDir               = Nothing
   , optPrintAgdaDir          = False
   , optPrintVersion          = False
   , optPrintHelp             = Nothing
@@ -456,6 +459,9 @@ inputFlag f o =
     case optInputFile o of
         Nothing  -> return $ o { optInputFile = Just f }
         Just _   -> throwError "only one input file allowed"
+
+agdaDirFlag :: FilePath -> Flag CommandLineOptions
+agdaDirFlag f o = return $ o { optAgdaDir = Just f }
 
 printAgdaDirFlag :: Flag CommandLineOptions
 printAgdaDirFlag o = return $ o { optPrintAgdaDir = True }
@@ -833,6 +839,9 @@ standardOptions =
 
     , Option []     ["print-agda-dir"] (NoArg printAgdaDirFlag)
                     ("print $AGDA_DIR and exit")
+
+    , Option []     ["agda-dir"] (ReqArg agdaDirFlag "DIR")
+                    ("override $AGDA_DIR")
 
     , Option ['I']  ["interactive"] (NoArg interactiveFlag)
                     "start in interactive mode"
